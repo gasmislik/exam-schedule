@@ -4,9 +4,6 @@ from collections import defaultdict
 import csv
 import time
 
-# ===============================
-# 1️⃣ Connexion DB
-# ===============================
 def connect_db():
     return mysql.connector.connect(
         host="localhost",
@@ -22,10 +19,7 @@ def load(sql):
     cursor.execute(sql)
     return cursor.fetchall()
 
-# ===============================
-# 2️⃣ Charger données
-# ===============================
-modules = load("SELECT * FROM modules")
+ modules = load("SELECT * FROM modules")
 groupes = load("SELECT * FROM groupes")
 formations = load("SELECT * FROM formations")
 profs = load("SELECT * FROM professeurs")
@@ -35,28 +29,20 @@ etudiant_groupes = load("SELECT * FROM etudiant_groupe")
 
 formation_name = {f["id"]: f["nom"] for f in formations}
 
-# ===============================
-# 3️⃣ Préprocessing
-# ===============================
 group_size = defaultdict(int)
 for eg in etudiant_groupes:
     group_size[eg["groupe_id"]] += 1
 
-# ===============================
-# 4️⃣ Contraintes globales
-# ===============================
 START_DATE = date(2025, 1, 10)
 NB_DAYS = 20
-DUREE = 90
+ DUREE = 90
 
-student_day = {}         # (groupe_id, date) -> 1 exam/day
-prof_day = defaultdict(int)  # (prof_id, date) -> exams/day
-prof_total = defaultdict(int) # total exams per prof
-room_usage = set()       # (salle_id, date, creneau_id) ou (salle_id, date, creneau_id, groupe_id)
+student_day = {}         
+prof_day = defaultdict(int)  
+prof_total = defaultdict(int) 
+room_usage = set()       
 
-# ===============================
-# 5️⃣ Helpers
-# ===============================
+
 def available_profs(exam_date):
     """Retourne la liste des profs disponibles, triée par le moins d'examens total"""
     profs_ok = [p for p in profs if prof_day[(p["id"], exam_date)] < 3]
@@ -69,20 +55,18 @@ def available_rooms(group_id, exam_date, creneau_id):
 
     for s in salles:
         if s["type"] == "Salle":
-            if (s["id"], exam_date, creneau_id) not in room_usage and size <= s["capacite"]:
+            if (s["id"],  exam_date, creneau_id) not in room_usage and size <= s["capacite"]:
                 result.append(s)
-        else:  # Amphi
+        else: 
             count = sum(
                 1 for r in room_usage
                 if len(r) == 4 and r[0] == s["id"] and r[1] == exam_date and r[2] == creneau_id
             )
-            if count < 2:
+             if count < 2:
                 result.append(s)
     return result
 
-# ===============================
-# 6️⃣ Générateur complet
-# ===============================
+
 from random import shuffle
 
 def generate_schedule_complete():
@@ -97,12 +81,11 @@ def generate_schedule_complete():
 
         for m in group_modules:
             placed = False
-            for d in range(NB_DAYS):
+               for d in range(NB_DAYS):
                 exam_date = START_DATE + timedelta(days=d)
                 if student_day.get((g["id"], exam_date)):
                     continue
 
-                # Shuffle créneaux for better distribution
                 shuffled_creneaux = creneaux.copy()
                 shuffle(shuffled_creneaux)
 
@@ -126,8 +109,8 @@ def generate_schedule_complete():
                             VALUES (%s,%s,%s,%s,%s,%s,%s)
                         """, (m["id"], g["id"], prof["id"], salle["id"], exam_date_str, c["id"], DUREE))
                         db.commit()
-                    except Exception as e:
-                        print(f"❌ Erreur INSERT pour groupe {g['nom']}, module {m['nom']}: {e}")
+                     except Exception as e:
+                        print(f" Erreur INSERT pour groupe {g['nom']}, module {m['nom']}: {e}")
                         continue
 
                     student_day[(g["id"], exam_date)] = 1
@@ -142,10 +125,10 @@ def generate_schedule_complete():
                     print(f"PLANIFIE: Groupe {g['nom']} | Module {m['nom']} | Salle {salle['nom']} | Prof {prof['nom']} | Date {exam_date_str} | Creneau {c['id']}")
                     inserted += 1
                     placed = True
-                    break  # exit créneau loop
+                    break  
 
                 if placed:
-                    break  # exit day loop
+                    break 
 
             if not placed:
                 non_planifies.append((g["nom"], m["nom"]))
@@ -154,17 +137,11 @@ def generate_schedule_complete():
     return inserted, non_planifies
 
 
-# ===============================
-# 7️⃣ Détection des conflits
-# ===============================
 def detect_conflicts():
     profs_conflict = [p for (p,d), cnt in prof_day.items() if cnt > 3]
     students_conflict = sum(1 for v in student_day.values() if v>1)
     return students_conflict, profs_conflict
 
-# ===============================
-# 8️⃣ Export CSV
-# ===============================
 def export_csv():
     cursor.execute("""
         SELECT e.id as exam_id, g.nom as groupe, m.nom as module, p.nom as prof, s.nom as salle, e.date_exam, e.creneau_id
@@ -181,9 +158,6 @@ def export_csv():
         for r in rows:
             writer.writerow([r["exam_id"], r["groupe"], r["module"], r["prof"], r["salle"], r["date_exam"], r["creneau_id"]])
 
-# ===============================
-# 9️⃣ Main
-# ===============================
 if __name__ == "__main__":
     start = time.time()
     inserted, non_planifies = generate_schedule_complete()
